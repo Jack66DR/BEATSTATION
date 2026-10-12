@@ -44,6 +44,16 @@ namespace bs
     inline const juce::StringArray& envNames()   { static juce::StringArray a { "HIT", "WAVE" }; return a; }
     inline const juce::StringArray& rateNames()  { static juce::StringArray a { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }; return a; }
     inline double rateQuarters (int r) { static const double q[] = { 1.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125 }; return q[juce::jlimit (0, 5, r)]; }
+    // Global step number at a host position (quarter notes), with swing on the off-steps.
+    // Used by both the audio sequencer and the on-screen playhead, so they always agree.
+    inline long long stepAt (double ppq, double stepQ, double swing)
+    {
+        const double pair = 2.0 * stepQ;
+        const double k = std::floor (ppq / pair), off = ppq - k * pair;
+        return (long long) (2.0 * k) + (off >= stepQ * (1.0 + swing) ? 1 : 0);
+    }
+    inline int laneStep (long long s, int len) { return (int) (((s % len) + len) % len); }
+
     inline const juce::StringArray& scaleNames() { static juce::StringArray a { "CHROMATIC", "MINOR", "MAJOR", "PENT MINOR", "PHRYGIAN", "DORIAN" }; return a; }
 
     inline const std::vector<int>& scaleSteps (int s)

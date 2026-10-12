@@ -77,6 +77,14 @@ int main (int argc, char** argv)
         for (size_t i = 0; ok && i < o.size(); ++i) ok = std::abs (o[i] - (int) (i * 96000)) < 300;
         CHECK (ok, "PUNCH hits land on the bar at 120 BPM (within 6 ms)");
 
+        // TEMPER at full chaos must leave the events alone: same onsets, same bar positions
+        setParam (p, bs::temper, 1.0f); host.ppq = 0.0;
+        auto oc = onsets (run (p, host, 4.2), 0.02f);
+        bool same = oc.size() == 3;
+        for (size_t i = 0; same && i < oc.size(); ++i) same = std::abs (oc[i] - (int) (i * 96000)) < 300;
+        CHECK (same, "TEMPER at full chaos changes the sound, not the events");
+        setParam (p, bs::temper, 0.5f);
+
         host.playing = false;
         auto s = run (p, host, 2.0);
         auto o2 = onsets (s);
@@ -88,6 +96,8 @@ int main (int argc, char** argv)
         setParam (p, bs::lid (0, bs::L::decay), 0.05f);
         setParam (p, bs::shuffle, 1.0f);
         p.setStep (0, 1, 0, 1.0f);  // the off-beat 16th
+        CHECK (p.stepForDisplay (0, 0.36) == 0 && p.stepForDisplay (0, 0.38) == 1 && p.stepForDisplay (0, 3.9) == 15 && p.stepForDisplay (0, 4.01) == 0,
+               "on-screen playhead uses the same step maths as the audio (swing and wrap)");
         auto o = onsets (run (p, host, 1.9));
         const int expect = (int) (0.375 * 24000); // 1/16 = 0.25 quarter, swung to 0.375 quarter at full shuffle
         CHECK (! o.empty() && std::abs (o[0] - expect) < 300, "SHUFFLE pushes the off-beat 16th late");

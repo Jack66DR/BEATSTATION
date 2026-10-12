@@ -17,6 +17,7 @@ public:
         addAndMakeVisible (slider);
         attach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (s, id, slider);
         slider.onValueChange = [this] { repaint(); };
+        slider.setDoubleClickReturnValue (true, param->convertFrom0to1 (param->getDefaultValue())); // double-click resets
     }
     void resized() override
     {
@@ -49,6 +50,7 @@ class LaneEditor : public juce::Component
 {
 public:
     LaneEditor (BeatstationProcessor& p, int l) : proc (p), layer (l) {}
+    void setPlayStep (int s) { if (s != playStep) { playStep = s; repaint(); } }
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -59,7 +61,7 @@ private:
     float semiY (int semi) const;
     int ySemi (float y) const;
     BeatstationProcessor& proc;
-    int layer, dragCol = -1, lastSemi = -1;
+    int layer, dragCol = -1, lastSemi = -1, playStep = -1;
     bool editingExisting = false, moved = false;
     float startVel = 0.8f, startX = 0;
 };
@@ -102,6 +104,9 @@ private:
     std::array<juce::TextButton, 4> pageBtn;
     juce::TextButton tabP { "PUNCH" }, tabW { "WASH" };
     int shownLayer = 0;
+    double displayPpq = 0.0, lastFrameMs = 0.0;
+    bool displayLocked = false;
+    int laneFrame = 0;
     std::unique_ptr<bs::ui::Knob> temperKnob;
 
     juce::TextButton prevBtn { "<" }, nextBtn { ">" }, presetBtn, saveBtn { "SAVE" };

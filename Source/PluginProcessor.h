@@ -73,7 +73,15 @@ public:
     int laneLength (int layer) const { return (int) state.getRawParameterValue (bs::lid (layer, bs::L::len))->load(); }
 
     // UI feedback
-    int getPlayingStep (int layer) const { return playStep[(size_t) layer].load(); }
+    // Host clock snapshot for the on-screen playhead
+    double getClockPpq() const   { return clockPpq.load(); }
+    double getClockBpm() const   { return clockBpm.load(); }
+    double getClockTimeMs() const { return clockTimeMs.load(); }
+    int stepForDisplay (int layer, double ppq) const
+    {
+        return bs::laneStep (bs::stepAt (ppq, bs::rateQuarters ((int) state.getRawParameterValue (bs::lid (layer, bs::L::rate))->load()),
+                                         0.5 * state.getRawParameterValue (bs::shuffle)->load()), laneLength (layer));
+    }
     float getActivity (int layer) const  { return activity[(size_t) layer].load(); }
     bool isTransportRunning() const      { return running.load(); }
     int getPage() const                  { return page.load(); }
@@ -102,9 +110,10 @@ private:
     bs::ModMatrix mm;
     double preparedRate = 0.0;
     std::array<long long, 2> lastStep { { LLONG_MIN, LLONG_MIN } };
-    juce::Random audioRng { 1979 };
+    juce::Random audioRng { juce::Time::currentTimeMillis() }; // fresh dice every session
 
-    std::array<std::atomic<int>, 2> playStep { { -1, -1 } }, auditionReq { { -1, -1 } };
+    std::array<std::atomic<int>, 2> auditionReq { { -1, -1 } };
+    std::atomic<double> clockPpq { 0.0 }, clockBpm { 120.0 }, clockTimeMs { 0.0 };
     std::array<std::atomic<float>, 2> activity {};
     std::atomic<bool> running { false };
     std::atomic<int> page { 0 };

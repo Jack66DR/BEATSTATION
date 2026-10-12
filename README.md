@@ -9,7 +9,7 @@ Two voices, two lanes, one clock. **PUNCH** hits up front, **WASH** rolls behind
 - **Press play in Logic.** BEATSTATION follows Logic's tempo and transport.
 - **Lanes:** click to place a note, drag up and down for pitch, left and right for velocity (circle size). Click a note to remove it; right-click also removes. Each lane has its own STEPS (1 to 32) and step RATE, so the lanes can drift against each other.
 - **ENV: HIT or WAVE.** HIT is percussive. WAVE swells and decays slowly, and each new hit pushes the swell higher rather than restarting it, so a pattern becomes rolling waves.
-- **TEMPER:** centre plays exactly what you programmed. Left calms it down (filters, softens, removes grit and crunch). Right pushes it into chaos (grit, FM, bit crushing, random pitch drops and more MUTATE).
+- **TEMPER:** shapes the sound only, never the notes or timing. Centre is exactly as programmed. Left calms it (filters, softens, removes grit and crunch). Right roughens it (more grit, FM and bit crushing). Double-click any knob to reset it.
 - **MUTATE:** chances that a step plays another step's note, shifts pitch, or changes velocity, live, without changing the stored pattern.
 - **MOD MATRIX:** how each step's pitch and velocity change the drop, FM, noise, oscillator balance, cutoff and levels.
 - **Presets** save the sound and both patterns.

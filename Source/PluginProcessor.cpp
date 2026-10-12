@@ -53,7 +53,7 @@ namespace
                 pat ({ {0,.9f}, {0,0}, {0,.4f}, {0,0}, {0,.7f}, {0,.3f}, {0,0}, {0,.5f}, {0,.9f}, {0,0}, {0,.4f}, {0,.6f}, {0,0}, {0,.3f}, {0,.8f}, {0,0} }),
                 pat ({ {0,.7f}, {7,.5f}, {12,.6f} }) });
             v.push_back ({ "Shop Floor Riot",
-                { { temper, 0.95f }, { mutOrder, 0.5f }, { mutPitch, 0.4f }, { mutVel, 0.4f }, { bit, 0.6f }, { P + "fm", 0.6f },
+                { { temper, 0.95f }, { mutOrder, 0.6f }, { mutPitch, 0.5f }, { mutVel, 0.5f }, { bit, 0.7f }, { P + "fm", 0.6f },
                   { P + "ring", 2 }, { P + "grit", 0.5f }, { shuffle, 0.35f }, { W + "fm", 0.5f }, { W + "len", 6 }, { W + "rate", 1 },
                   { pmID (1), 0.7f }, { vmID (0), 0.6f } },
                 pat ({ {0,1}, {12,.5f}, {3,.7f}, {0,0}, {24,.6f}, {0,.9f}, {7,.4f}, {15,.6f}, {0,1}, {0,0}, {22,.5f}, {10,.7f}, {0,.8f}, {27,.4f}, {0,0}, {12,.9f} }),
@@ -169,14 +169,14 @@ void BeatstationProcessor::fillParams()
 
 void BeatstationProcessor::fireStep (int layer, int stepIdx)
 {
-    playStep[(size_t) layer].store (stepIdx);
     const auto& lane = pattern.lane[(size_t) layer];
     const int len = laneLength (layer);
     int semi = lane.semi[(size_t) stepIdx].load();
     float vel = lane.vel[(size_t) stepIdx].load();
 
-    // MUTATE: real-time changes that never touch the stored pattern
-    const float chaosBoost = gp.t.chaos * 0.35f;
+    // MUTATE: real-time changes that never touch the stored pattern.
+    // TEMPER deliberately has no say here: it shapes the sound, never the notes or events.
+    const float chaosBoost = 0.0f;
     if (audioRng.nextFloat() < raw (mutOrder) + chaosBoost)
         for (int tries = 0; tries < 8; ++tries)
         {
@@ -234,6 +234,11 @@ void BeatstationProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             if (auto b = pos->getBpm()) bpm = *b;
         }
     running.store (playing);
+    if (playing)
+    {
+        clockPpq.store (ppq0); clockBpm.store (bpm);
+        clockTimeMs.store (juce::Time::getMillisecondCounterHiRes());
+    }
 
     int seg = 0;
     if (playing)
@@ -247,14 +252,12 @@ void BeatstationProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             const double ppq = ppq0 + i * qps;
             for (int l = 0; l < 2; ++l)
             {
-                const double pair = 2.0 * stepQ[l];
-                const double k = std::floor (ppq / pair), off = ppq - k * pair;
-                const long long s = (long long) (2.0 * k) + (off >= stepQ[l] * (1.0 + swing) ? 1 : 0);
+                const long long s = stepAt (ppq, stepQ[l], swing);
                 if (s != lastStep[(size_t) l])
                 {
                     if (i > seg) { engine.render (lp, gp, Lp, Rp == Lp ? Lp : Rp, seg, i); seg = i; }
                     lastStep[(size_t) l] = s;
-                    fireStep (l, (int) (((s % len[l]) + len[l]) % len[l]));
+                    fireStep (l, laneStep (s, len[l]));
                 }
             }
         }
@@ -262,7 +265,6 @@ void BeatstationProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     else
     {
         lastStep = { LLONG_MIN, LLONG_MIN };
-        playStep[0].store (-1); playStep[1].store (-1);
     }
 
     if (Rp == Lp)

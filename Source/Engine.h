@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <vector>
+#include <chrono>
 
 // BEATSTATION sound engine. No JUCE dependency.
 //   Layer: one mono percussive/bass voice. VCO1 + VCO2 + noise, each with a pitch
@@ -16,7 +17,7 @@ constexpr double kTwoPi = 6.283185307179586;
 
 struct Rng
 {
-    uint32_t s = 0x1234567u;
+    uint32_t s = 0x1234567u ^ (uint32_t) (reinterpret_cast<uintptr_t> (this) >> 4) ^ (uint32_t) std::chrono::steady_clock::now().time_since_epoch().count() | 1u;
     float u() { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return (float) (s & 0xFFFFFF) / 16777216.0f; }
     float bi() { return u() * 2.0f - 1.0f; }
 };
@@ -56,7 +57,8 @@ public:
         note = midi;
         const float vb = vel * 2.0f - 1.0f;
         auto m = [&] (int d) { return mm.pm[(size_t) d] * pitchPos + mm.vm[(size_t) d] * vb; };
-        dropOff = m (0) * 24.0f + (t.chaos > 0 ? rng.bi () * t.chaos * 12.0f : 0.0f);
+        dropOff = m (0) * 24.0f;   // no random pitch from TEMPER: notes stay as written
+        (void) t; (void) rng;
         fmOff = m (1) * 0.6f;
         noiseOff = m (2);
         balOff = m (3);
@@ -110,7 +112,7 @@ public:
         else o1 = wave (p.osc1, ph1, dt1);
 
         // VCO2 with FM from VCO1 (phase modulation)
-        const float fmIdx = std::clamp (p.fm + fmOff + t.chaos * 0.5f, 0.0f, 1.6f) * 1.3f;
+        const float fmIdx = std::clamp (p.fm + fmOff + t.chaos * 0.3f, 0.0f, 1.6f) * 1.3f;
         ph2 += dt2; if (ph2 >= 1.0) ph2 -= 1.0;
         double th2 = ph2 + fmIdx * o1; th2 -= std::floor (th2);
         double d2 = th2 - prev2; d2 -= std::floor (d2); if (d2 > 0.5) d2 = 1.0 - d2; d2 = std::clamp (d2, 1.0e-5, 0.25);
@@ -127,7 +129,7 @@ public:
         float x = o1 * p.lvl1 * g1 + o2 * p.lvl2 * g2 + nz * noiseLvl * nenv;
 
         // filter: TPT state variable, with GRIT = resonant noise in the machine
-        const float grit = std::clamp (p.grit * (1.0f - t.calm) + t.chaos * 0.6f, 0.0f, 1.0f);
+        const float grit = std::clamp (p.grit * (1.0f - t.calm) + t.chaos * 0.35f, 0.0f, 1.0f);
         gritLp += (nz - gritLp) * 0.02f;
         float fc = p.cutoff * std::exp2 (p.fenv * 7.0f * fenvV + cutOct + grit * 1.8f * gritLp);
         fc = std::clamp (fc, 20.0f, (float) (sr * 0.45));
@@ -232,7 +234,7 @@ public:
     void render (const std::array<LayerParams, 2>& lp, const GlobalParams& gp, float* L, float* R, int start, int end)
     {
         // per-block constants
-        const float bit = std::clamp (gp.bit * (1.0f - gp.t.calm) + gp.t.chaos * 0.5f, 0.0f, 1.0f);
+        const float bit = std::clamp (gp.bit * (1.0f - gp.t.calm) + gp.t.chaos * 0.3f, 0.0f, 1.0f);
         const float drive = 1.0f + bit * bit * 24.0f;
         const float driveNorm = 1.0f / (0.6f + 0.4f * std::sqrt (drive));
         const float levels = std::exp2 (16.0f - bit * 12.0f);     // 16 bits down to 4

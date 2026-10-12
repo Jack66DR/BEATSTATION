@@ -42,7 +42,7 @@ void LaneEditor::paint (juce::Graphics& g)
 
     const float colW = (r.getWidth() - 16.0f) / (float) maxSteps;
     const int pageStart = proc.getPage() * 8;
-    const int playing = proc.getPlayingStep (layer);
+    const int playing = playStep;
     for (int c = 0; c < maxSteps; ++c)
     {
         const float x = colX (c);
@@ -153,7 +153,7 @@ BeatstationEditor::BeatstationEditor (BeatstationProcessor& p) : AudioProcessorE
     { v.push_back (std::make_unique<Knob> (s, id, label)); addAndMakeVisible (*v.back()); };
 
     mk (seqKnobs, shuffle, "SHUFFLE"); mk (seqKnobs, root, "ROOT");
-    mk (seqKnobs, mutOrder, "M.ORDER"); mk (seqKnobs, mutPitch, "M.PITCH"); mk (seqKnobs, mutVel, "M.VEL");
+    mk (seqKnobs, mutOrder, "ORDER"); mk (seqKnobs, mutPitch, "PITCH"); mk (seqKnobs, mutVel, "VELOCITY");
     scaleBox.addItemList (scaleNames(), 1);
     addAndMakeVisible (scaleBox);
     scaleAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (s, scale, scaleBox);
@@ -216,7 +216,7 @@ BeatstationEditor::BeatstationEditor (BeatstationProcessor& p) : AudioProcessorE
         }
     }
     showLayer (0);
-    startTimerHz (30);
+    startTimerHz (60);
 }
 
 BeatstationEditor::~BeatstationEditor() { stopTimer(); setLookAndFeel (nullptr); }
@@ -284,6 +284,19 @@ void BeatstationEditor::paint (juce::Graphics& g)
     section (g, seqArea, "SEQUENCER");
     g.setFont (font (13.5f, true));
     g.setColour (col::cream);
+    {
+        // MUTATE group caption over the three mutate knobs
+        auto a = seqKnobs[2]->getBounds().getUnion (seqKnobs[4]->getBounds());
+        const int y = seqArea.getY() + 8;
+        g.setColour (col::cream.withAlpha (0.3f));
+        g.drawHorizontalLine (y, (float) a.getX() + 4, (float) a.getRight() - 4);
+        g.setColour (col::recess);
+        g.fillRect (a.getCentreX() - 40, y - 7, 80, 14);
+        g.setColour (col::amber);
+        g.setFont (font (13.5f, true));
+        g.drawText ("MUTATE", a.getCentreX() - 40, y - 7, 80, 14, juce::Justification::centred);
+        g.setColour (col::cream);
+    }
     g.drawText ("SCALE", scaleBox.getX(), scaleBox.getY() - 22, scaleBox.getWidth(), 18, juce::Justification::centred);
     g.drawText ("LAUNCH CONTROL PAGE", pageBtn[0].getX(), pageBtn[0].getY() - 22, pageBtn[3].getRight() - pageBtn[0].getX(), 18, juce::Justification::centred);
 
@@ -369,7 +382,7 @@ void BeatstationEditor::resized()
     seqArea = { 20, 382, W - 40, 104 };
     {
         int x = seqArea.getX() + 140;
-        for (auto& k : seqKnobs) { k->setBounds (x, seqArea.getY() + 4, 76, 96); x += 80; }
+        for (auto& k : seqKnobs) { k->setBounds (x, seqArea.getY() + 14, 76, 88); x += 80; }
         scaleBox.setBounds (x + 20, seqArea.getY() + 44, 150, 30);
         int px = seqArea.getRight() - 4 * 78 - 20;
         for (auto& b : pageBtn) { b.setBounds (px, seqArea.getY() + 44, 72, 30); px += 78; }
@@ -401,7 +414,29 @@ void BeatstationEditor::resized()
 
 void BeatstationEditor::timerCallback()
 {
-    for (auto& l : lanes) l->repaint();
+    // Smooth playhead: run our own clock at the song tempo, gently locked to the host's
+    // position, so Logic's bursty block processing doesn't make the highlight jump about.
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    const double frameMs = lastFrameMs > 0.0 ? juce::jlimit (0.0, 100.0, now - lastFrameMs) : 0.0;
+    lastFrameMs = now;
+    if (proc.isTransportRunning())
+    {
+        const double bpm = proc.getClockBpm();
+        const double target = proc.getClockPpq() + (now - proc.getClockTimeMs()) / 60000.0 * bpm;
+        if (! displayLocked || std::abs (target - displayPpq) > 1.0) { displayPpq = target; displayLocked = true; }
+        else
+        {
+            displayPpq += frameMs / 60000.0 * bpm;
+            displayPpq += (target - displayPpq) * 0.05;
+        }
+        for (int l = 0; l < 2; ++l) lanes[(size_t) l]->setPlayStep (proc.stepForDisplay (l, displayPpq));
+    }
+    else
+    {
+        displayLocked = false;
+        for (auto& l : lanes) l->setPlayStep (-1);
+    }
+    if (++laneFrame % 4 == 0) for (auto& l : lanes) l->repaint(); // pattern edits from the Launch Control
     const auto name = proc.presets.currentName();
     if (presetBtn.getButtonText() != name) presetBtn.setButtonText (name);
     for (int i = 0; i < 4; ++i) pageBtn[(size_t) i].setToggleState (proc.getPage() == i, juce::dontSendNotification);
