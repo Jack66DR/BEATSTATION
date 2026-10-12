@@ -1,0 +1,49 @@
+name: Build BEATSTATION
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (universal arm64 + x86_64)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DBEATSTATION_BUILD_TESTS=ON
+
+      - name: Build AU, VST3 and the engine test
+        run: cmake --build build --config Release --target BEATSTATION_AU BEATSTATION_VST3 BEATSTATION_Test -j 4
+
+      - name: Run offline engine test
+        run: ./build/BEATSTATION_Test_artefacts/Release/BEATSTATION_Test
+
+      - name: Sign (ad hoc) and zip
+        run: |
+          ART=build/BEATSTATION_artefacts/Release
+          codesign --force --deep --sign - "$ART/AU/BEATSTATION.component"
+          codesign --force --deep --sign - "$ART/VST3/BEATSTATION.vst3"
+          mkdir -p dist
+          ditto -c -k --keepParent "$ART/AU/BEATSTATION.component" dist/BEATSTATION-AU.zip
+          ditto -c -k --keepParent "$ART/VST3/BEATSTATION.vst3" dist/BEATSTATION-VST3.zip
+          cp Profile/LaunchControlXL-Profile.md dist/
+
+      - name: Upload plugins
+        uses: actions/upload-artifact@v4
+        with:
+          name: BEATSTATION-macOS
+          path: dist/*
+
+      - name: Validate AU with auval
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R build/BEATSTATION_artefacts/Release/AU/BEATSTATION.component ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          auval -v aumu Btst Mnrs
